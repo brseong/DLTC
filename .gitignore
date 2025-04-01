@@ -2,3 +2,5 @@ data/
 train_log/
 __pycache__/
 *.pyc
+wandb/
+save/
