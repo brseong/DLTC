@@ -125,6 +125,7 @@ def train(args):
             step = epoch * len(train_loader) + batch_idx
             wandb.log(
                 {
+                    "epoch": epoch,
                     "train_loss": cost.item(),
                     "train_accuracy": correct.item(),
                     "lr": optimizer.param_groups[0]["lr"],
@@ -163,7 +164,7 @@ def train(args):
                 "val_loss": val_loss,
                 "val_accuracy": val_accuracy,
             },
-            step=epoch,
+            step=step,
         )
 
         # Save model checkpoint (optional)
