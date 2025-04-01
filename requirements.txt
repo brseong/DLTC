@@ -1,0 +1,4 @@
+tensorflow
+opencv-python
+git+https://github.com/tensorpack/tensorpack.git
+tensorboardX
