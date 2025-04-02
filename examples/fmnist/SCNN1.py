@@ -105,8 +105,8 @@ class SNNLayer(nn.Module):
 
         # %% [markdown]
         # $$\Pi = In_{outsize} *_{elementwise} W_{sorted}$$
-        # $$(\Sigma_{W})_{b, i, o} = \sum_{i'=0}^{I}W_{b,i',o}$$
-        # $$(\Sigma_{product})_{b, i, o} = \sum_{i'=0}^{I}(\Pi)_{b,i',o}$$
+        # $$(\Sigma_{W})_{b, i, o} = \sum_{i'=0}^{\# InFeatures}(W_{sorted})_{b,i',o}$$
+        # $$(\Sigma_{product})_{b, i, o} = \sum_{i'=0}^{\# InFeatures}(\Pi)_{b,i',o}$$
 
         # %%
         weight_input_mul = (
@@ -150,21 +150,32 @@ class SNNLayer(nn.Module):
             out_spike_ws,
         )
 
+        # %% [markdown]
+        # $$ (In_{left})_{b,i,o} = \begin{cases}
+        # (In_{outsize})_{b,i+1,o} & \text{if}\ i < \# InFeatures\\
+        # 1 & \text{otherwise}.
+        # \end{cases} $$
+        # $$ (O_{valid})_{b,i,o} = \begin{cases}
+        # MaxSpikeTime & \text{if}\ (O_{large})_{b,i,o} > (In_{left})_{b,i,o} \\
+        # (O_{large})_{b,i,o} & \text{otherwise.}
+        # \end{cases}$$
+        # $$O_{b,o} = \min_{i}((O_{valid})_{b,i,o})$$
+
         # %%
         input_sorted_outsize_slice = input_sorted_outsize[:, 1:, :]
         input_sorted_outsize_left = torch.cat(
             [
-                input_sorted_outsize_slice,
+                input_sorted_outsize_slice,  # (batch_size, in_size, out_size)
                 self.MAX_SPIKE_TIME
                 * torch.ones(
                     batch_size,
                     1,
                     self.out_size,
                     device=input_sorted_outsize_slice.device,
-                ),  # device 추가
+                ),  # (batch_size, 1, out_size)
             ],
             dim=1,
-        )
+        )  # (batch_size, in_size+1, out_size)
         out_spike_valid = torch.where(
             out_spike_large > input_sorted_outsize_left,
             self.MAX_SPIKE_TIME
@@ -176,6 +187,7 @@ class SNNLayer(nn.Module):
         out_spike = torch.min(out_spike_valid, dim=1).values
         return out_spike
 
+    # %%
     def w_sum_cost(self):
         threshold = 1.0
         part1 = threshold - torch.sum(self.weight, dim=0)
