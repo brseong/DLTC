@@ -1,11 +1,34 @@
-import numpy as np
+# -*- coding: utf-8 -*-
+# ---
+# jupyter:
+#   jupytext:
+#     cell_metadata_filter: -all
+#     custom_cell_magics: kql
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.11.2
+#   kernelspec:
+#     display_name: abs
+#     language: python
+#     name: python3
+# ---
+
+# %%
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 
+# %% [markdown]
+# $$W \in \mathbb{R}^{\# InFeatures\ \times\ \# OutFeatures}$$
+# $$\mathbf{w}_{delay}\in \mathbb{R}^{\# Infeatures}$$
+
+
+# %%
 class SNNLayer(nn.Module):
-    def __init__(self, in_size, out_size):
+    def __init__(self, in_size: int, out_size: int):
         super(SNNLayer, self).__init__()
         self.MAX_SPIKE_TIME = 1e5
         self.in_size_real = in_size
@@ -18,27 +41,100 @@ class SNNLayer(nn.Module):
             torch.Tensor(self.in_size_real).normal_() / (self.in_size_real**0.5)
         )
 
-    def forward(self, layer_in):
-        layer_in = layer_in * torch.exp(F.relu(self.delay))
-        batch_num = layer_in.shape[0]
-        bias_layer_in = torch.ones(batch_num, 1, device=layer_in.device)  # device 추가
-        layer_in = torch.cat([layer_in, bias_layer_in], dim=1)
+    # %% [markdown]
+    # $$LayerIn \in \mathbb{R}^{\#Samples\ \times\ \#InFeatures}$$
 
-        # PyTorch에서는 top_k가 (values, indices)를 반환합니다.
-        _, input_sorted_indices = torch.topk(
-            -layer_in, self.in_size, dim=1, sorted=False
-        )
-        input_sorted = torch.gather(layer_in, 1, input_sorted_indices)
-        input_sorted_outsize = input_sorted.unsqueeze(2).repeat(1, 1, self.out_size)
+    # %%
+    def forward(self, layer_in: torch.Tensor) -> torch.Tensor:
+        """_summary_
+
+        Args:
+            layer_in (torch.Tensor): input tensor of shape (batch_size, in_size)
+
+        Returns:
+            torch.Tensor: output spikes.
+        """
+
+        # %% [markdown]
+        # $$LayerIn_{delayed}=LayerIn *_{samplewise} \exp(\text{ReLU}(\mathbf{w}_{delay})) \in \mathbb{R}^{\#Samples\ \times\ \#InFeatures}$$
+        # $$LayerIn_{bias}=\text{Concat}(LayerIn_{delayed}, \mathbf{1}) \in \mathbb{R}^{\#Samples\ \times\ \#(InFeatures+1)}$$
+        # $$s.t.\quad (\mathbf{1})_{i,j} = 1.$$
+
+        # %%
+        # Apply the delay to the input tensor
+        layer_in = layer_in * torch.exp(F.relu(self.delay))
+        batch_size = layer_in.shape[0]
+        bias_layer_in = torch.ones(batch_size, 1, device=layer_in.device)  # device 추가
+        layer_in = torch.cat(
+            [layer_in, bias_layer_in], dim=1
+        )  # (batch_size, in_size+1)
+
+        # %% [markdown]
+        # $$In_{sorted}=\text{sort}(LayerIn_{bias}) \in \mathbb{R}^{\#Samples\ \times\ (\#InFeatures+1)}$$
+        # $$SortIndices=\text{argsort}(LayerIn_{bias}) \in \mathbb{N}^{\#Samples\ \times\ (\#InFeatures+1)}$$
+
+        # %%
+        # sort of torch returns (values, indices)
+        # indices are sorted in ascending order
+        input_sorted, input_sorted_indices = layer_in.sort(
+            dim=1
+        )  # (batch_size, in_size+1)
+
+        # %% [markdown]
+        # $$(In_{outsize})_{b,i,o} = (In_{sorted})_{b,i}$$
+        # $$In_{outsize} \in \mathbb{R}^{\#Samples\ \times\ (\# InFeatures + 1)\ \times\ \# OutFeatures}$$
+
+        # %%
+        input_sorted_outsize = input_sorted.unsqueeze(2).repeat(
+            1, 1, self.out_size
+        )  # (batch_size, in_size+1, out_size)
+
+        # %% [markdown]
+        # <center> Sort rows of the weight matrix, which represent input neurons, by their latency to spike, in ascending order. </center>
+        #
+        # $$(W_{batch})_{b,i,o} = W_{i,o}$$
+        # $$(W_{sorted})_{b,i,o} = (W_{batch})_{b,SortIndices_{b,i},o}$$
+        # $$W_{sorted} \in \mathbb{R}^{\# Samples\ \times\ (\# InFeatures + 1)\ \times\ \# OutFeatures}$$
+
+        # %%
         weight_sorted = torch.gather(
-            self.weight.unsqueeze(0).repeat(batch_num, 1, 1),
+            self.weight.unsqueeze(0).repeat(batch_size, 1, 1),
             1,
             input_sorted_indices.unsqueeze(2).repeat(1, 1, self.out_size),
-        )
-        weight_input_mul = weight_sorted * input_sorted_outsize
-        weight_sumed = torch.cumsum(weight_sorted, dim=1)
-        weight_input_sumed = torch.cumsum(weight_input_mul, dim=1)
-        out_spike_all = weight_input_sumed / torch.clamp(weight_sumed - 1, min=1e-10)
+        )  # (batch_size, in_size+1, out_size)
+
+        # %% [markdown]
+        # $$\Pi = In_{outsize} *_{elementwise} W_{sorted}$$
+        # $$(\Sigma_{W})_{b, i, o} = \sum_{i'=0}^{I}W_{b,i',o}$$
+        # $$(\Sigma_{product})_{b, i, o} = \sum_{i'=0}^{I}(\Pi)_{b,i',o}$$
+
+        # %%
+        weight_input_mul = (
+            weight_sorted * input_sorted_outsize
+        )  # (batch_size, in_size+1, out_size)
+        weight_sumed = torch.cumsum(
+            weight_sorted, dim=1
+        )  # (batch_size, in_size+1, out_size)
+        weight_input_sumed = torch.cumsum(
+            weight_input_mul, dim=1
+        )  # (batch_size, in_size+1, out_size)
+
+        # %% [markdown]
+        # $$ (\lceil\Sigma\rfloor_W)_{b,i,o} = \max((\Sigma_W)_{b,i,o} - 1, 1e-10)$$
+        # $$ (O_{all})_{b,i,o} = (\lceil\Sigma\rfloor_W)_{b,i,o} / (\lceil\Sigma\rfloor_W)_{b,i,o}$$
+        # $$ (O_{ws})_{b,i,o} = \begin{cases}
+        # MaxSpikeTime & \text{if} (\Sigma_W)_{b,i,o} < 1 \\
+        # (O_{all})_{b,i,o} & \text{otherwise.}
+        # \end{cases}$$
+        # $$ (O_{large})_{b,i,o} = \begin{cases}
+        # MaxSpikeTime & \text{if} (O_{ws})_{b,i,o} < (In_{outsize})_{b,i,o} \\
+        # (O_{ws})_{b,i,o} & \text{otherwise.}
+        # \end{cases}$$
+
+        # %%
+        out_spike_all = weight_input_sumed / torch.clamp(
+            weight_sumed - 1, min=1e-10
+        )  # (batch_size, in_size+1, out_size)
         out_spike_ws = torch.where(
             weight_sumed < 1,
             self.MAX_SPIKE_TIME
@@ -46,20 +142,22 @@ class SNNLayer(nn.Module):
                 out_spike_all, device=out_spike_all.device
             ),  # device 추가
             out_spike_all,
-        )
+        )  # (batch_size, in_size+1, out_size)
         out_spike_large = torch.where(
             out_spike_ws < input_sorted_outsize,
             self.MAX_SPIKE_TIME
             * torch.ones_like(out_spike_ws, device=out_spike_ws.device),  # device 추가
             out_spike_ws,
         )
+
+        # %%
         input_sorted_outsize_slice = input_sorted_outsize[:, 1:, :]
         input_sorted_outsize_left = torch.cat(
             [
                 input_sorted_outsize_slice,
                 self.MAX_SPIKE_TIME
                 * torch.ones(
-                    batch_num,
+                    batch_size,
                     1,
                     self.out_size,
                     device=input_sorted_outsize_slice.device,
@@ -89,6 +187,7 @@ class SNNLayer(nn.Module):
         return torch.mean(w_sqr)
 
 
+# %%
 class SCNNLayer(nn.Module):
     def __init__(self, kernel_size=3, in_channel=1, out_channel=1, strides=1):
         super(SCNNLayer, self).__init__()
@@ -167,6 +266,7 @@ class SCNNLayer(nn.Module):
         return img_reshaped
 
 
+# %%
 def loss_func(both):
     """
     function to calculate loss, refer to paper p.7, formula 11
@@ -188,6 +288,7 @@ def loss_func(both):
     # return loss
 
 
+# %%
 def max_pool_layer(x, size, stride, name):
     x = F.max_pool2d(x, size, stride, padding=0)  # 수정됨
     return x

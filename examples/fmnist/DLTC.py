@@ -1,28 +1,43 @@
 #!/usr/bin/env python
+# ---
+# jupyter:
+#   jupytext:
+#     cell_metadata_filter: -all
+#     custom_cell_magics: kql
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.11.2
+# ---
+
+# %%
 import argparse
 import os, sys
 import wandb
-import SCNN1
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from tqdm.auto import tqdm
+import SCNN1
 
+# %%
 sys.path.append("..")
 wandb.init(
     project="SCNN-FashionMNIST",
     name="SCNN1-FashionMNIST",
 )
 
+# %%
 K = 100
 K2 = 1e-2
 TRAINING_BATCH = 10
 scale = 2
 
 
+# %%
 class FashionMNISTDataset(Dataset):
     def __init__(self, train, transform=None):
         self.data = datasets.FashionMNIST(
@@ -37,6 +52,7 @@ class FashionMNISTDataset(Dataset):
         return image, label
 
 
+# %%
 class Model(nn.Module):
     def __init__(self, cifar_classnum):
         super(Model, self).__init__()
@@ -68,6 +84,7 @@ class Model(nn.Module):
         return cost, correct
 
 
+# %%
 def get_data(train_or_test, BATCH_SIZE=128):
     is_train = train_or_test == "train"
 
@@ -88,6 +105,7 @@ def get_data(train_or_test, BATCH_SIZE=128):
     return dataloader
 
 
+# %%
 def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -176,6 +194,7 @@ def train(args):
         )
 
 
+# %%
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
