@@ -41,8 +41,8 @@ class SNNLayer(nn.Module):
             torch.Tensor(self.in_size_real).normal_() / (self.in_size_real**0.5)
         )
 
-    # %% [markdown]
-    # $$LayerIn \in \mathbb{R}^{\#Samples\ \times\ \#InFeatures}$$
+# %% [markdown]
+# $$LayerIn \in \mathbb{R}^{\#Samples\ \times\ \#InFeatures}$$
 
     # %%
     def forward(self, layer_in: torch.Tensor) -> torch.Tensor:
@@ -55,10 +55,10 @@ class SNNLayer(nn.Module):
             torch.Tensor: output spikes.
         """
 
-        # %% [markdown]
-        # $$LayerIn_{delayed}=LayerIn *_{samplewise} \exp(\text{ReLU}(\mathbf{w}_{delay})) \in \mathbb{R}^{\#Samples\ \times\ \#InFeatures}$$
-        # $$LayerIn_{bias}=\text{Concat}(LayerIn_{delayed}, \mathbf{1}) \in \mathbb{R}^{\#Samples\ \times\ \#(InFeatures+1)}$$
-        # $$s.t.\quad (\mathbf{1})_{i,j} = 1.$$
+# %% [markdown]
+# $$LayerIn_{delayed}=LayerIn *_{samplewise} \exp(\text{ReLU}(\mathbf{w}_{delay})) \in \mathbb{R}^{\#Samples\ \times\ \#InFeatures}$$
+# $$LayerIn_{bias}=\text{Concat}(LayerIn_{delayed}, \mathbf{1}) \in \mathbb{R}^{\#Samples\ \times\ \#(InFeatures+1)}$$
+# $$s.t.\quad (\mathbf{1})_{i,j} = 1.$$
 
         # %%
         # Apply the delay to the input tensor
@@ -69,9 +69,9 @@ class SNNLayer(nn.Module):
             [layer_in, bias_layer_in], dim=1
         )  # (batch_size, in_size+1)
 
-        # %% [markdown]
-        # $$In_{sorted}=\text{sort}(LayerIn_{bias}) \in \mathbb{R}^{\#Samples\ \times\ (\#InFeatures+1)}$$
-        # $$SortIndices=\text{argsort}(LayerIn_{bias}) \in \mathbb{N}^{\#Samples\ \times\ (\#InFeatures+1)}$$
+# %% [markdown]
+# $$In_{sorted}=\text{sort}(LayerIn_{bias}) \in \mathbb{R}^{\#Samples\ \times\ (\#InFeatures+1)}$$
+# $$SortIndices=\text{argsort}(LayerIn_{bias}) \in \mathbb{N}^{\#Samples\ \times\ (\#InFeatures+1)}$$
 
         # %%
         # sort of torch returns (values, indices)
@@ -80,21 +80,21 @@ class SNNLayer(nn.Module):
             dim=1
         )  # (batch_size, in_size+1)
 
-        # %% [markdown]
-        # $$(In_{outsize})_{b,i,o} = (In_{sorted})_{b,i}$$
-        # $$In_{outsize} \in \mathbb{R}^{\#Samples\ \times\ (\# InFeatures + 1)\ \times\ \# OutFeatures}$$
+# %% [markdown]
+# $$(In_{outsize})_{b,i,o} = (In_{sorted})_{b,i}$$
+# $$In_{outsize} \in \mathbb{R}^{\#Samples\ \times\ (\# InFeatures + 1)\ \times\ \# OutFeatures}$$
 
         # %%
         input_sorted_outsize = input_sorted.unsqueeze(2).repeat(
             1, 1, self.out_size
         )  # (batch_size, in_size+1, out_size)
 
-        # %% [markdown]
-        # <center> Sort rows of the weight matrix, which represent input neurons, by their latency to spike, in ascending order. </center>
-        #
-        # $$(W_{batch})_{b,i,o} = W_{i,o}$$
-        # $$(W_{sorted})_{b,i,o} = (W_{batch})_{b,SortIndices_{b,i},o}$$
-        # $$W_{sorted} \in \mathbb{R}^{\# Samples\ \times\ (\# InFeatures + 1)\ \times\ \# OutFeatures}$$
+# %% [markdown]
+# <center> Sort rows of the weight matrix, which represent input neurons, by their latency to spike, in ascending order. </center>
+#
+# $$(W_{batch})_{b,i,o} = W_{i,o}$$
+# $$(W_{sorted})_{b,i,o} = (W_{batch})_{b,SortIndices_{b,i},o}$$
+# $$W_{sorted} \in \mathbb{R}^{\# Samples\ \times\ (\# InFeatures + 1)\ \times\ \# OutFeatures}$$
 
         # %%
         weight_sorted = torch.gather(
@@ -103,10 +103,10 @@ class SNNLayer(nn.Module):
             input_sorted_indices.unsqueeze(2).repeat(1, 1, self.out_size),
         )  # (batch_size, in_size+1, out_size)
 
-        # %% [markdown]
-        # $$\Pi = In_{outsize} *_{elementwise} W_{sorted}$$
-        # $$(\Sigma_{W})_{b, i, o} = \sum_{i'=0}^{\# InFeatures}(W_{sorted})_{b,i',o}$$
-        # $$(\Sigma_{product})_{b, i, o} = \sum_{i'=0}^{\# InFeatures}(\Pi)_{b,i',o}$$
+# %% [markdown]
+# $$\Pi = In_{outsize} *_{elementwise} W_{sorted}$$
+# $$(\Sigma_{W})_{b, i, o} = \sum_{i'=0}^{\# InFeatures}(W_{sorted})_{b,i',o}$$
+# $$(\Sigma_{product})_{b, i, o} = \sum_{i'=0}^{\# InFeatures}(\Pi)_{b,i',o}$$
 
         # %%
         weight_input_mul = (
@@ -119,17 +119,17 @@ class SNNLayer(nn.Module):
             weight_input_mul, dim=1
         )  # (batch_size, in_size+1, out_size)
 
-        # %% [markdown]
-        # $$ (\lceil\Sigma\rfloor_W)_{b,i,o} = \max((\Sigma_W)_{b,i,o} - 1, 1e-10)$$
-        # $$ (O_{all})_{b,i,o} = (\lceil\Sigma\rfloor_W)_{b,i,o} / (\lceil\Sigma\rfloor_W)_{b,i,o}$$
-        # $$ (O_{ws})_{b,i,o} = \begin{cases}
-        # MaxSpikeTime & \text{if} (\Sigma_W)_{b,i,o} < 1 \\
-        # (O_{all})_{b,i,o} & \text{otherwise.}
-        # \end{cases}$$
-        # $$ (O_{large})_{b,i,o} = \begin{cases}
-        # MaxSpikeTime & \text{if} (O_{ws})_{b,i,o} < (In_{outsize})_{b,i,o} \\
-        # (O_{ws})_{b,i,o} & \text{otherwise.}
-        # \end{cases}$$
+# %% [markdown]
+# $$ (\lceil\Sigma\rfloor_W)_{b,i,o} = \max((\Sigma_W)_{b,i,o} - 1, 1e-10)$$
+# $$ (O_{all})_{b,i,o} = (\lceil\Sigma\rfloor_W)_{b,i,o} / (\lceil\Sigma\rfloor_W)_{b,i,o}$$
+# $$ (O_{ws})_{b,i,o} = \begin{cases}
+# MaxSpikeTime & \text{if} (\Sigma_W)_{b,i,o} < 1 \\
+# (O_{all})_{b,i,o} & \text{otherwise.}
+# \end{cases}$$
+# $$ (O_{large})_{b,i,o} = \begin{cases}
+# MaxSpikeTime & \text{if} (O_{ws})_{b,i,o} < (In_{outsize})_{b,i,o} \\
+# (O_{ws})_{b,i,o} & \text{otherwise.}
+# \end{cases}$$
 
         # %%
         out_spike_all = weight_input_sumed / torch.clamp(
@@ -150,16 +150,16 @@ class SNNLayer(nn.Module):
             out_spike_ws,
         )
 
-        # %% [markdown]
-        # $$ (In_{left})_{b,i,o} = \begin{cases}
-        # (In_{outsize})_{b,i+1,o} & \text{if}\ i < \# InFeatures\\
-        # 1 & \text{otherwise}.
-        # \end{cases} $$
-        # $$ (O_{valid})_{b,i,o} = \begin{cases}
-        # MaxSpikeTime & \text{if}\ (O_{large})_{b,i,o} > (In_{left})_{b,i,o} \\
-        # (O_{large})_{b,i,o} & \text{otherwise.}
-        # \end{cases}$$
-        # $$O_{b,o} = \min_{i}((O_{valid})_{b,i,o})$$
+# %% [markdown]
+# $$ (In_{left})_{b,i,o} = \begin{cases}
+# (In_{outsize})_{b,i+1,o} & \text{if}\ i < \# InFeatures\\
+# 1 & \text{otherwise}.
+# \end{cases} $$
+# $$ (O_{valid})_{b,i,o} = \begin{cases}
+# MaxSpikeTime & \text{if}\ (O_{large})_{b,i,o} > (In_{left})_{b,i,o} \\
+# (O_{large})_{b,i,o} & \text{otherwise.}
+# \end{cases}$$
+# $$O_{b,o} = \min_{i}((O_{valid})_{b,i,o})$$
 
         # %%
         input_sorted_outsize_slice = input_sorted_outsize[:, 1:, :]
