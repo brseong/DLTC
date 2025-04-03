@@ -29,8 +29,8 @@ else:
 # %%
 sys.path.append("..")
 wandb.init(
-    project="SNN-FashionMNIST",
-    name="SNN-FashionMNIST",
+    project="SCNN-FashionMNIST",
+    name="SCNN-FashionMNIST",
 )
 
 # %%
