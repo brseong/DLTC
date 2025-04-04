@@ -21,7 +21,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from tqdm.auto import tqdm
-from ... import layer
+from .preprocessing import get_data
+from ...model import ModelInfo, SimpleCNN
 
 # %%
 sys.path.append("..")
@@ -31,48 +32,16 @@ wandb.init(
 )
 
 # %%
-K = 100
-K2 = 1e-2
 TRAINING_BATCH = 10
-NUM_CLASSES = 10
-scale = 2
-
-
-# %%
-class FashionMNISTDataset(Dataset):
-    def __init__(self, train, transform=None):
-        self.data = datasets.FashionMNIST(
-            root="./data", train=train, download=True, transform=transform
-        )
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        image, label = self.data[idx]
-        return image, label
-
-
-# %%
-def get_data(train_or_test, BATCH_SIZE=128):
-    is_train = train_or_test == "train"
-
-    # ds = dataset.FashionMnist(train_or_test)
-    if is_train:
-        transform = transforms.Compose(
-            [
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomRotation(10),
-                transforms.ToTensor(),
-            ]
-        )
-    else:
-        transform = transforms.Compose([transforms.ToTensor()])
-
-    dataset = FashionMNISTDataset(train=is_train, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=is_train)
-    return dataloader
-
+minfo = ModelInfo(
+    [(5,16,1), ("P", 2), (5,32,1), ("P", 2), "Flatten", 800, 128, NUM_CLASSES:=10],
+    # (1,28,28) -> (16,24,24) -> (16,12,12) -> (32,8,8) -> (32,4,4) -> 512 -> 800 -> 128 -> 10
+    K := 100,
+    K2 := 1e-2,
+    scale := 2,
+    in_channels = 1,
+    flatten_size = 512
+)
 
 # %%
 def train():
@@ -84,7 +53,7 @@ def train():
     test_loader = get_data("test", NUM_CLASSES)
 
     # Model
-    model = Model(NUM_CLASSES).to(device)
+    model = SimpleCNN(minfo).to(device)
 
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)

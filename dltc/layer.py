@@ -70,8 +70,10 @@ class SNNLayer(nn.Module):
         )  # (batch_size, in_size+1)
 
 # %% [markdown]
-# $$In_{sorted}=\text{sort}(LayerIn_{bias}) \in \mathbb{R}^{\#Samples\ \times\ (\#InFeatures+1)}$$
-# $$SortIndices=\text{argsort}(LayerIn_{bias}) \in \mathbb{N}^{\#Samples\ \times\ (\#InFeatures+1)}$$
+# <center> Sort the input feature dimension by ascending order. </center>
+#
+# $$In_{sorted}=\text{sort}_{InFeatures}(LayerIn_{bias}) \in \mathbb{R}^{\#Samples\ \times\ (\#InFeatures+1)}$$
+# $$SortIndices=\text{argsort}_{InFeatures}(LayerIn_{bias}) \in \mathbb{N}^{\#Samples\ \times\ (\#InFeatures+1)}$$
 
         # %%
         # sort of torch returns (values, indices)
