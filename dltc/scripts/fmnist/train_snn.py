@@ -21,10 +21,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from tqdm.auto import tqdm
-if __name__ == "__main__":
-    import SCNN1
-else:
-    from . import SCNN1
+from ...model import ModelInfo, SimpleFFN
 
 # %%
 sys.path.append("..")
@@ -34,12 +31,13 @@ wandb.init(
 )
 
 # %%
-K = 100
-K2 = 1e-2
 TRAINING_BATCH = 10
-NUM_CLASSES = 10
-scale = 2
-
+minfo = ModelInfo(
+    [784, 1000, NUM_CLASSES:=10],
+    K := 100,
+    K2 := 1e-2,
+    scale := 2
+)
 
 # %%
 class FashionMNISTDataset(Dataset):
@@ -54,38 +52,6 @@ class FashionMNISTDataset(Dataset):
     def __getitem__(self, idx):
         image, label = self.data[idx]
         return image, label
-
-
-# %%
-class Model(nn.Module):
-    def __init__(self, cifar_classnum):
-        super(Model, self).__init__()
-        self.num_classes = cifar_classnum
-        self.layer_in = SCNN1.SNNLayer(in_size=784, out_size=1000)
-        self.layer_out = SCNN1.SNNLayer(in_size=1000, out_size=10)
-
-    def forward(self, image, label):
-        image = scale * (-image + 1)
-        image = torch.exp(image.view(image.size(0), -1))  # Flatten the image
-
-        layerin_out = self.layer_in.forward(image)
-        layerout_out = self.layer_out.forward(layerin_out)
-
-        output_real = F.one_hot(label, num_classes=self.num_classes).float()
-        layerout_groundtruth = torch.cat(
-            [layerout_out, output_real], dim=1
-        )  # (Batch, Class)
-        loss = torch.mean(
-            torch.stack([SCNN1.loss_func(x.unsqueeze(0)) for x in layerout_groundtruth])
-        )
-
-        wsc = self.layer_in.w_sum_cost() + self.layer_out.w_sum_cost()
-        l2c = self.layer_in.l2_cost() + self.layer_out.l2_cost()
-
-        cost = loss + K * wsc + K2 * l2c
-        correct = (torch.argmax(-layerout_out, dim=1) == label).float().mean()
-
-        return cost, correct
 
 
 # %%
@@ -119,7 +85,7 @@ def train():
     test_loader = get_data("test", NUM_CLASSES)
 
     # Model
-    model = Model(NUM_CLASSES).to(device)
+    model = SimpleFFN(minfo).to(device)
 
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
@@ -197,7 +163,7 @@ def train():
             os.path.join("save", f"model_epoch_{epoch + 1}.pth"),
         )
 
+
 # %%
 if __name__ == "__main__":
-
     train()

@@ -1,5 +1,5 @@
 import os
-from examples.fmnist import DLTC, DLTCCNN
+from dltc.scripts.fmnist import train_scnn as fmnist_scnn, train_snn as fmnist_snn
 from argparse import ArgumentParser
 
 if __name__ == "__main__":
@@ -10,10 +10,10 @@ if __name__ == "__main__":
     
     match getattr(args, "dataset"):
         case "fmnist":
-            if getattr(args, "conv", False):
-                DLTC.train()
+            if getattr(args, "conv"):
+                fmnist_scnn.train()
             else:
-                DLTCCNN.train()
+                fmnist_snn.train()
         case "cifar10":
             pass
         case _: raise ValueError("Wrong dataset.")
